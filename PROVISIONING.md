@@ -273,6 +273,82 @@ Use the appropriate address for each additional VM. After configuration, take a 
 
 During Debian installation, select only **SSH server** and **standard system utilities**. Create your own temporary administrator account; do not name it `operator`.
 
+### Set the static lab address
+
+The permanent network adapter connected to `vmbr77` needs the static address `10.77.0.80/24` and **must not have a gateway**. The temporary `vmbr0` adapter should remain a separate DHCP interface until provisioning is complete.
+
+First identify the adapters inside the VM:
+
+```bash
+ip -br link
+ip -br address
+```
+
+With the usual Proxmox VirtIO ordering, the first adapter is `ens18` and the temporary second adapter is `ens19`. Confirm this from their current addresses or compare their MAC addresses with **VM → Hardware → Network Device** in Proxmox. Do not assume the names if your output differs.
+
+On a minimal Debian 12 installation using `ifupdown`, edit `/etc/network/interfaces`. A typical provisioning configuration is:
+
+```text
+auto lo
+iface lo inet loopback
+
+# Permanent isolated lab interface: net0 / vmbr77
+auto ens18
+iface ens18 inet static
+    address 10.77.0.80/24
+
+# Temporary provisioning interface: net1 / vmbr0
+allow-hotplug ens19
+iface ens19 inet dhcp
+```
+
+Replace `ens18` and `ens19` with the names shown on your VM. Notice that the `ens18` block has no `gateway` line.
+
+Apply the configuration from the Proxmox console so an SSH disconnection cannot lock you out:
+
+```bash
+sudo systemctl restart networking
+ip -br address
+ip route
+```
+
+While the temporary interface exists, the default route will normally point through `ens19`. That is expected during provisioning.
+
+After packages and files have been copied:
+
+1. Shut down `relay-08`.
+2. Remove the `vmbr0` network device from **VM → Hardware** in Proxmox.
+3. Start the VM and open its Proxmox console.
+4. Remove or comment out the obsolete `ens19` DHCP block in `/etc/network/interfaces`.
+5. Restart networking or reboot.
+6. Verify the final configuration:
+
+```bash
+ip -br address
+ip route
+ping -c 2 10.77.0.80
+```
+
+The expected final state is:
+
+```text
+ens18    UP    10.77.0.80/24
+```
+
+`ip route` should contain the connected route `10.77.0.0/24 dev ens18` but no `default via` route. The self-ping should succeed. From a student VM, `ping 10.77.0.80` should also succeed.
+
+If your Debian installation uses NetworkManager instead of `ifupdown`, configure the permanent interface with:
+
+```bash
+sudo nmcli connection show
+sudo nmcli connection modify "Wired connection 1" \
+  ipv4.method manual ipv4.addresses 10.77.0.80/24 \
+  ipv4.gateway "" ipv4.dns ""
+sudo nmcli connection up "Wired connection 1"
+```
+
+Make sure `Wired connection 1` corresponds to the `vmbr77` adapter before running the command.
+
 Copy the project's `relay-station` folder into the VM. From that folder run:
 
 ```bash
@@ -283,7 +359,7 @@ The setup script:
 
 - Creates the non-sudo `operator` account.
 - Starts the intentionally vulnerable HTTP service on TCP 8080.
-- Creates the recoverable password file and final flag.
+- Generates a unique password, writes its recoverable copy, and creates a unique final flag.
 - Refuses to run the web service as root.
 
 Confirm password-based SSH login is available for this disposable lab account. On Debian, inspect the effective setting with:
@@ -409,3 +485,238 @@ python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
 The child opens `http://127.0.0.1:8000`, while `relay-08` remains the only separate target. This is simpler, but discovering the academy host is no longer part of the network picture.
+
+## Appendix: transfer from GitHub through a temporary ZFS dataset
+
+A QEMU VM cannot directly bind-mount a host ZFS filesystem dataset as though it were an LXC mount point. The clean read-only handoff is:
+
+1. Clone the repository into a temporary dataset on the Proxmox host.
+2. Turn the `relay-station` folder into a small ISO image.
+3. Attach the ISO to the VM as a virtual CD-ROM.
+4. Copy the folder into the VM.
+5. Detach the ISO and remove the temporary host data.
+6. Start the vulnerable service only after all temporary access has been removed.
+
+Run the following on the Proxmox host as `root`. Replace the example pool, repository URL, branch, and VM ID with your values. Commands below assume the normal Proxmox `local` storage exists at `/var/lib/vz` and permits ISO content.
+
+### A. Confirm the names you will use
+
+```bash
+zpool list
+pvesm status
+qm list
+```
+
+For the examples below:
+
+```text
+ZFS pool:       rpool
+Temporary set:  rpool/signal-transfer
+Relay VM ID:    108
+ISO storage:    local
+```
+
+Do not copy these identifiers blindly. Confirm that `108` is really the Relay VM and that `rpool/signal-transfer` does not already contain wanted data.
+
+### B. Install the host-side transfer tools if needed
+
+Check first:
+
+```bash
+command -v git
+command -v xorriso
+```
+
+If either command is missing:
+
+```bash
+apt update
+apt install -y git ca-certificates xorriso
+```
+
+### C. Create the temporary dataset
+
+```bash
+zfs create \
+  -o mountpoint=/srv/signal-transfer \
+  -o exec=off \
+  -o setuid=off \
+  -o devices=off \
+  rpool/signal-transfer
+```
+
+Verify the exact dataset and mount point:
+
+```bash
+zfs list rpool/signal-transfer
+findmnt /srv/signal-transfer
+```
+
+### D. Clone and inspect the repository
+
+For a public repository:
+
+```bash
+git clone --depth 1 \
+  https://github.com/YOUR-ACCOUNT/YOUR-REPOSITORY.git \
+  /srv/signal-transfer/repository
+```
+
+If the challenge is on a non-default branch, add `--branch BRANCH-NAME` before the URL.
+
+Do not put a GitHub token in the URL or shell history. For a private repository, use an SSH deploy key dedicated to this repository, or download an archive on your administration computer and upload it to the dataset.
+
+Inspect what will be exposed to the guest:
+
+```bash
+find /srv/signal-transfer/repository/relay-station \
+  -maxdepth 2 -type f -printf '%P\n'
+```
+
+Expected files include:
+
+```text
+README.md
+server.py
+setup-relay.sh
+```
+
+Make sure the checkout contains no `.env` files, private keys, access tokens, repository credentials, personal files, or unrelated secrets. Only the `relay-station` subfolder is placed on the ISO; the Git metadata and academy source are not included. The setup script generates the password and flag at deployment time, but the source still discloses how the puzzle works. Prefer a private repository if the children could inspect GitHub outside the lab.
+
+### E. Create the transfer ISO
+
+First confirm that Proxmox's `local` storage accepts ISO content:
+
+```bash
+pvesm status --storage local
+grep -A5 '^dir: local' /etc/pve/storage.cfg
+```
+
+The `content` setting should include `iso`. Create the image:
+
+```bash
+xorriso -as mkisofs \
+  -V SIGNAL_RELAY \
+  -o /var/lib/vz/template/iso/relay-station-transfer.iso \
+  -r -J \
+  /srv/signal-transfer/repository/relay-station
+```
+
+Confirm Proxmox can see it:
+
+```bash
+pvesm list local --content iso | grep relay-station-transfer
+```
+
+The corresponding Proxmox volume ID is normally:
+
+```text
+local:iso/relay-station-transfer.iso
+```
+
+If your ISO-capable storage is not named `local`, put the ISO in that storage's `template/iso/` directory and use its storage ID instead.
+
+### F. Attach the ISO to the Relay VM
+
+The least error-prone method is the web interface:
+
+1. Shut down `relay-08`.
+2. Select **relay-08 → Hardware**.
+3. If its installation CD/DVD drive still exists, edit it and select `relay-station-transfer.iso` from `local` storage.
+4. Otherwise select **Add → CD/DVD Drive**, choose **Use CD/DVD disc image file**, then select the transfer ISO.
+5. Start the VM and open its Proxmox console.
+
+The equivalent common CLI form for VM ID `108` is:
+
+```bash
+qm set 108 --ide2 local:iso/relay-station-transfer.iso,media=cdrom
+```
+
+If the VM already uses a different CD-ROM bus/device, use the UI rather than overwriting an unknown device.
+
+### G. Mount and copy inside the VM
+
+Inside `relay-08`, locate the CD device:
+
+```bash
+lsblk -o NAME,TYPE,SIZE,FSTYPE,LABEL,MOUNTPOINTS
+```
+
+It will normally be `/dev/sr0` with the label `SIGNAL_RELAY`. Copy it into the VM:
+
+```bash
+sudo mkdir -p /mnt/signal-transfer /opt/relay-station
+sudo mount -o ro /dev/sr0 /mnt/signal-transfer
+sudo cp -a /mnt/signal-transfer/. /opt/relay-station/
+sudo umount /mnt/signal-transfer
+sudo chown -R root:root /opt/relay-station
+sudo chmod 755 /opt/relay-station/setup-relay.sh
+```
+
+Check the local copy:
+
+```bash
+find /opt/relay-station -maxdepth 2 -type f -printf '%P\n'
+python3 -m py_compile /opt/relay-station/server.py
+```
+
+Do not run `setup-relay.sh` yet if the temporary `vmbr0` interface is still attached.
+
+### H. Detach all temporary access
+
+1. Shut down `relay-08`.
+2. In **Hardware**, remove or disconnect the transfer CD/DVD drive.
+3. Remove the temporary network adapter connected to `vmbr0`.
+4. Confirm the permanent adapter remains connected to `vmbr77`.
+5. Start the VM and use its Proxmox console.
+
+If `ide2` was created solely for this transfer, the CLI removal for VM ID `108` is:
+
+```bash
+qm set 108 --delete ide2
+```
+
+Inside the VM, confirm it has only the isolated address and no default route:
+
+```bash
+ip -br address
+ip route
+```
+
+Only after that verification, deploy the challenge:
+
+```bash
+cd /opt/relay-station
+sudo sh setup-relay.sh
+```
+
+### I. Remove the host-side transfer material
+
+First verify that the ISO is no longer attached:
+
+```bash
+qm config 108 | grep -E 'cdrom|\.iso' || true
+```
+
+Inspect the exact cleanup targets:
+
+```bash
+ls -l /var/lib/vz/template/iso/relay-station-transfer.iso
+zfs list rpool/signal-transfer
+```
+
+When those names are correct and the VM has a working local copy, remove the ISO and destroy only the dedicated temporary dataset:
+
+```bash
+rm -- /var/lib/vz/template/iso/relay-station-transfer.iso
+zfs destroy rpool/signal-transfer
+```
+
+Finally verify that both are gone:
+
+```bash
+test ! -e /var/lib/vz/template/iso/relay-station-transfer.iso
+zfs list rpool/signal-transfer
+```
+
+The second command should report that the dataset does not exist. Keep the GitHub repository free of real passwords, SSH private keys, tokens, and infrastructure details even if it is private.

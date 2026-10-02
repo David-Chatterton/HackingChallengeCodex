@@ -16,7 +16,7 @@ Copy this folder to the challenge VM, then run:
 sudo sh setup-relay.sh
 ```
 
-The script creates a non-sudo `operator` account, starts the vulnerable site on port 8080, and creates the final flag. The server refuses to run as root. Confirm that OpenSSH Server is installed and password login is enabled for this disposable lab account; some cloud images disable password login by default.
+The script creates a non-sudo `operator` account, generates a unique password and flag, starts the vulnerable site on port 8080, and creates the final flag file. The server refuses to run as root. Confirm that OpenSSH Server is installed and password login is enabled for this disposable lab account; some cloud images disable password login by default.
 
 ## Intended solution
 
@@ -29,3 +29,5 @@ The script creates a non-sudo `operator` account, starts the vulnerable site on 
 7. Run `ls -la`, then `cat MISSION_COMPLETE.txt`.
 
 Stop the exercise at the flag. Reset the VM snapshot afterward. The `operator` account has no sudo rights and the systemd unit adds basic containment, but network isolation remains essential.
+
+The access code and flag are generated during setup, so publishing the deployment files does not reveal those two answers. However, the source still reveals the vulnerability and intended file path; use a private repository if the children might browse the repository outside the isolated lab.

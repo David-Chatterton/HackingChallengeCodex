@@ -9,12 +9,14 @@ fi
 useradd --create-home --shell /bin/bash operator 2>/dev/null || true
 mkdir -p /home/operator/relay
 cp "$(dirname "$0")/server.py" /home/operator/relay/server.py
-printf '%s\n' 'signal-lantern-8080' > /home/operator/relay/ssh-code.txt
-printf '%s\n' 'FLAG{YOU_FOUND_THE_LOST_RELAY}' > /home/operator/MISSION_COMPLETE.txt
+ACCESS_CODE="$(python3 -c 'import secrets; print(secrets.token_urlsafe(15))')"
+FLAG_CODE="$(python3 -c 'import secrets; print("FLAG{" + secrets.token_hex(12).upper() + "}")')"
+printf '%s\n' "$ACCESS_CODE" > /home/operator/relay/ssh-code.txt
+printf '%s\n' "$FLAG_CODE" > /home/operator/MISSION_COMPLETE.txt
 chown -R operator:operator /home/operator/relay /home/operator/MISSION_COMPLETE.txt
 chmod 700 /home/operator/relay
 chmod 600 /home/operator/relay/ssh-code.txt
-echo 'operator:signal-lantern-8080' | chpasswd
+printf 'operator:%s\n' "$ACCESS_CODE" | chpasswd
 
 cat > /etc/systemd/system/relay-station.service <<'EOF'
 [Unit]
@@ -39,3 +41,4 @@ EOF
 systemctl daemon-reload
 systemctl enable --now relay-station.service
 echo "Relay Station is active on TCP 8080. Keep this VM on an isolated lab VLAN/bridge."
+echo "A unique access code and flag were generated. Root can inspect them if recovery is needed."
