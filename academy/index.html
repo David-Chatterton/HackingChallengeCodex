@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A guided, ethical introduction to Linux, networking, web inspection, and a safe capture-the-flag mission.">
+  <title>Signal School // Junior Cyber Lab</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Signal School home"><span class="brand-mark">S//</span> SIGNAL SCHOOL</a>
+    <div class="status"><span class="pulse"></span> TRAINING NETWORK ONLINE</div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">FIELD MANUAL 01 · AUTHORIZED LAB ONLY</p>
+        <h1>Learn to think like a <em>friendly</em> hacker.</h1>
+        <p class="intro">Your mission is to understand a tiny network, find a hidden relay station, and prove you can log in—without damaging anything.</p>
+        <a class="button" href="#rules">Begin training <span>↓</span></a>
+      </div>
+      <div class="radar" aria-hidden="true">
+        <div class="radar-sweep"></div><i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i>
+        <span>LAB RANGE</span>
+      </div>
+    </section>
+
+    <section class="rules" id="rules">
+      <div><span class="section-no">00</span><h2>Rules of engagement</h2></div>
+      <div class="rule-grid">
+        <article><b>01</b><h3>Permission first</h3><p>Only test machines your grown-up has clearly put inside this lab.</p></article>
+        <article><b>02</b><h3>Look, don’t break</h3><p>Read and experiment. Never delete files, stop services, or change passwords.</p></article>
+        <article><b>03</b><h3>Keep a notebook</h3><p>Record the command, what you expected, and what actually happened.</p></article>
+        <article><b>04</b><h3>Stop at the flag</h3><p>Once the mission file is found, you’re done. Tell your grown-up how you got there.</p></article>
+      </div>
+    </section>
+
+    <section class="modules" id="training">
+      <div class="section-heading"><p class="eyebrow">CORE TRAINING</p><h2>Four skills. One mission.</h2><p>Use a Linux terminal in your training VM. Tick each field check as you finish it.</p></div>
+
+      <article class="module" data-module="1">
+        <div class="module-index">01</div>
+        <div class="module-body"><p class="tag">LINUX</p><h3>Know where you are</h3><p>The terminal is a conversation: you type a command, Linux answers. Start by identifying yourself and looking around.</p>
+          <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>trainee@linux-vm</span></div><pre><code><span class="prompt">$</span> whoami
+<span class="output">trainee</span>
+<span class="prompt">$</span> pwd
+<span class="output">/home/trainee</span>
+<span class="prompt">$</span> ls -la
+<span class="output">.  ..  Documents  notes.txt</span></code></pre></div>
+          <p class="explain"><code>whoami</code> names your user, <code>pwd</code> shows your location, and <code>ls -la</code> reveals every item—including hidden ones.</p>
+          <label class="check"><input type="checkbox"><span></span>I ran all three and can explain the output.</label>
+        </div>
+      </article>
+
+      <article class="module" data-module="2">
+        <div class="module-index">02</div>
+        <div class="module-body"><p class="tag">NETWORKS</p><h3>Read the map</h3><p>An IP address identifies a device. A subnet is its local neighbourhood. Find yours:</p>
+          <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>network check</span></div><pre><code><span class="prompt">$</span> ip -br address
+<span class="output">lo    UNKNOWN  127.0.0.1/8
+eth0  UP       192.168.50.23/24</span>
+<span class="prompt">$</span> ip route
+<span class="output">default via 192.168.50.1 dev eth0</span></code></pre></div>
+          <div class="callout"><strong>Decode it:</strong> <code>/24</code> usually means nearby addresses share the first three numbers. Here, the lab neighbourhood is <code>192.168.50.0/24</code>. Use the subnet shown on <em>your</em> VM.</div>
+          <label class="check"><input type="checkbox"><span></span>I wrote down my VM’s IP and /24 subnet.</label>
+        </div>
+      </article>
+
+      <article class="module" data-module="3">
+        <div class="module-index">03</div>
+        <div class="module-body"><p class="tag">DISCOVERY</p><h3>Find listening services</h3><p><code>nmap</code> asks which devices and ports respond. First find live lab hosts, then inspect only the mystery host your grown-up prepared.</p>
+          <div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>authorized scan</span></div><pre><code><span class="prompt">$</span> nmap -sn 192.168.50.0/24
+<span class="comment"># Replace this example subnet with yours.</span>
+<span class="prompt">$</span> nmap -sV 192.168.50.42
+<span class="comment"># Replace this IP with the new lab host you discover.</span></code></pre></div>
+          <p class="explain"><code>-sn</code> discovers hosts without a port scan. <code>-sV</code> identifies services. Ports are doors; a web service on port <code>8080</code> is opened as <code>http://IP:8080</code>.</p>
+          <label class="check"><input type="checkbox"><span></span>I can identify the web port and the SSH port.</label>
+        </div>
+      </article>
+
+      <article class="module" data-module="4">
+        <div class="module-index">04</div>
+        <div class="module-body"><p class="tag">WEB THINKING</p><h3>Test one idea at a time</h3><p>Web forms send your input to a server. A secure server treats it as data. A careless one may let punctuation change the command it runs.</p>
+          <div class="split">
+            <div><h4>Inspect</h4><p>In the browser, use <kbd>Ctrl</kbd> + <kbd>U</kbd> to view page source. Developers sometimes leave useful comments.</p></div>
+            <div><h4>Compare</h4><p>Try a normal value first. Then add a shell separator and a harmless identity command: <code>127.0.0.1; whoami</code>.</p></div>
+          </div>
+          <div class="callout warning"><strong>Why this matters:</strong> command injection is serious. In this lab, use it only to inspect. Never try this against a site without written permission.</div>
+          <label class="check"><input type="checkbox"><span></span>I understand the difference between data and a command.</label>
+        </div>
+      </article>
+    </section>
+
+    <section class="mission" id="mission">
+      <p class="eyebrow">FINAL BRIEFING</p><h2>Operation Lost Relay</h2>
+      <p class="mission-lede">A forgotten station is broadcasting somewhere on your lab network. Its web console trusts user input too much. Find the station, inspect it, and recover the operator’s access code.</p>
+      <ol>
+        <li><span>1</span><div><strong>Discover</strong><p>Use your subnet and a host-discovery scan to find the unfamiliar address.</p></div></li>
+        <li><span>2</span><div><strong>Enumerate</strong><p>Identify its services and visit the unusual web port.</p></div></li>
+        <li><span>3</span><div><strong>Investigate</strong><p>Read the console and its page source. Test the diagnostic form with harmless commands.</p></div></li>
+        <li><span>4</span><div><strong>Log in</strong><p>Recover the operator name and access code, then use <code>ssh operator@IP</code>.</p></div></li>
+        <li><span>5</span><div><strong>Claim the flag</strong><p>Once logged in, look around and read <code>MISSION_COMPLETE.txt</code>. Stop there.</p></div></li>
+      </ol>
+      <div class="unlock" id="unlock"><div><span class="lock-icon">◇</span><strong>Coordinates encrypted</strong><p>Complete all four field checks to reveal your last clue.</p></div><p class="clue" hidden>The relay speaks HTTP on a port that sounds like “eight, oh, eighty.” Scan your lab neighbourhood and follow the signal.</p></div>
+    </section>
+  </main>
+  <footer><span>SIGNAL SCHOOL // JUNIOR CYBER LAB</span><span>BUILD · BREAK · EXPLAIN · REPAIR</span></footer>
+  <script src="script.js"></script>
+</body>
+</html>
